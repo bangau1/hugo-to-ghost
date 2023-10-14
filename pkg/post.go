@@ -42,3 +42,11 @@ func NewPostFromFrontMatterDocFile(frontMatterDocFile string) (MarkdownPost, err
 	post.Slug = strings.TrimSuffix(filepath.Base(file.Name()), filepath.Ext(file.Name()))
 	return post, nil
 }
+
+func (m *MarkdownPost) ChangeStaticContentPrefix(oldPrefix string, newPrefix string) {
+	// TODO: this is not correct implementation
+	// since it also changes all occurences, not just the prefix.
+	// Should improve this later, by strictly changes all content inside the
+	// ![image content](<prefix>/xxx) pattern.
+	m.Content = strings.ReplaceAll(m.Content, oldPrefix, newPrefix)
+}

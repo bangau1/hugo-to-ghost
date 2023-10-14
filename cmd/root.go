@@ -38,19 +38,27 @@ func Execute() {
 }
 
 var (
-	contentDir  string
-	isRecursive bool = false // TODO(bangau1): to support recursive mode
+	contentDir                 string
+	isRecursive                bool = false // TODO(bangau1): to support recursive mode
+	staticContentPrefixChanges string
 )
 
 func init() {
 	rootCmd.Flags().StringVar(&contentDir, "contentDir", "", "The content directory where the frontmatter posts are located. Example: 'content/english/posts/'")
+	rootCmd.Flags().StringVar(&staticContentPrefixChanges, "staticContentPrefixChanges", "", "To change the static content prefix. Example: /img/uploads/,/content/images/hugo/ ")
 	// TODO(bangau1): add recursive mode
 
 	rootCmd.MarkFlagRequired("contentDir")
 }
 
 func cmdRun(cmd *cobra.Command, args []string) {
-
+	staticContentPrefixChangesRules := make([]string, 0)
+	if len(staticContentPrefixChanges) > 0 {
+		staticContentPrefixChangesRules = strings.Split(staticContentPrefixChanges, ",")
+	}
+	if len(staticContentPrefixChangesRules)%2 > 0 {
+		log.Fatal("staticContentPrefixChanges is invalid.")
+	}
 	if !isRecursive {
 		files, err := os.ReadDir(contentDir)
 		if err != nil {
@@ -69,6 +77,10 @@ func cmdRun(cmd *cobra.Command, args []string) {
 				post, err := pkg.NewPostFromFrontMatterDocFile(mdFilePath)
 				if err != nil {
 					log.Fatal(err)
+				}
+				// apply changes to the post's static content prefix path
+				for i := 0; i < len(staticContentPrefixChangesRules); i += 2 {
+					post.ChangeStaticContentPrefix(staticContentPrefixChangesRules[i], staticContentPrefixChangesRules[i+1])
 				}
 
 				// convert MarkdownPost to GhostContent
