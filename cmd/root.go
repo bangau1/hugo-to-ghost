@@ -1,12 +1,8 @@
-/*
-Copyright © 2023 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -23,13 +19,15 @@ var rootCmd = &cobra.Command{
 	Short: "A simple CLI that helps migrating contents from Hugo (Markdown) to Ghost",
 	Long: `A simple CLI that helps migrating contents from Hugo (Markdown) to Ghost.
 
-This CLI program will output json file that can later be imported to Ghost Import functionality (via Admin dashboard).
+This CLI program will create/update the Ghost's post from Hugo post (markdown).
 
 For example:
-- hugo-to-ghost --contentDir ./content/english/post > ghost-content.json
-	to output the JSON file containing all Hugo's posts that conformed with the Ghost Importing Content format:
+- hugo-to-ghost --contentDir ./content/english/post 
+	reads all markdown files within --contentDir, convert it to Ghost's post content format and upload it into Ghost Admin API (create or update, based on the slug).
+
 - hugo-to-ghost --contentDir ./content/english/post --staticContentPrefixChanges "/img/uploads/,/content/images/hugo/"
-	to change the image assets in Hugo (that previously located in /img/uploads/ path) to /content/images/hugo folder inside the ghost installation
+	same as previous example, but additionally it changes the image assets in Hugo (that previously located in /img/uploads/ path) to /content/images/hugo folder inside the ghost installation.
+	Note that you need to upload manually the image/static assets from Hugo to the Ghost's. This tools doesn't handle image upload automatically (it just helps convert the prefix url)
 `,
 	Run: cmdRun,
 }
@@ -45,10 +43,8 @@ func Execute() {
 
 var (
 	contentDir                 string
-	isRecursive                bool = false // TODO(bangau1): to support recursive mode
 	staticContentPrefixChanges string
 
-	deduplicatePosts bool
 	ghostAdminAPIKey string
 	ghostURL         string
 )
@@ -57,92 +53,87 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	rootCmd.Flags().StringVar(&contentDir, "contentDir", "", "The content directory where the frontmatter posts are located. Example: 'content/english/posts/'")
-	rootCmd.Flags().StringVar(&staticContentPrefixChanges, "staticContentPrefixChanges", "", "To change the static content prefix. Example: /img/uploads/,/content/images/hugo/ ")
-	rootCmd.Flags().BoolVar(&deduplicatePosts, "deduplicate", false, "Set it true if you want to detect the same post in Ghost. Ghost doesn't do deduplication functionality, hence if you don't set it and import the JSON file multiple times, it will create new post everytime (instead of updating it)")
-	rootCmd.Flags().StringVar(&ghostAdminAPIKey, "ghostAdminAPIKey", "", "The Ghost's Admin API Key. It's only needed if you set --deduplicate flag")
-	rootCmd.Flags().StringVar(&ghostURL, "ghostUrl", "http://localhost:8080", "The Ghost's URL It's only needed if you set --deduplicate flag")
-	// TODO(bangau1): add recursive mode
+	rootCmd.Flags().StringVar(&staticContentPrefixChanges, "staticContentPrefixChanges", "", "Prefix changes rule, separated by comma. The total element must be even number. Example: /img/uploads/,/content/images/hugo/,/oldPrefix2/,/newPrefix2/,etc,etc ")
+	rootCmd.Flags().StringVar(&ghostAdminAPIKey, "ghostAdminAPIKey", "", "The Ghost's Admin API Key. It's needed for create/update post in Ghost")
+	rootCmd.Flags().StringVar(&ghostURL, "ghostUrl", "http://localhost:8080", "The Ghost's URL")
 
 	rootCmd.MarkFlagRequired("contentDir")
+	rootCmd.MarkFlagRequired("ghostAdminAPIKey")
 }
 
 func cmdRun(cmd *cobra.Command, args []string) {
+	ghostApi := pkg.NewGhostAdminAPI(ghostURL, ghostAdminAPIKey)
+
 	staticContentPrefixChangesRules := make([]string, 0)
 	if len(staticContentPrefixChanges) > 0 {
 		staticContentPrefixChangesRules = strings.Split(staticContentPrefixChanges, ",")
 	}
 	if len(staticContentPrefixChangesRules)%2 > 0 {
-		log.Fatal("staticContentPrefixChanges is invalid.")
-	}
-	var ghostApi pkg.GhostAdminAPI
-	if deduplicatePosts {
-		if ghostAdminAPIKey == "" {
-			log.Fatal("--ghostAdminAPIKey is required if --deduplicate is set")
-		}
-		ghostApi = pkg.NewGhostAdminAPI(ghostURL, ghostAdminAPIKey)
+		log.Fatal("staticContentPrefixChanges is invalid. This should be even number")
 	}
 
-	if !isRecursive {
-		files, err := os.ReadDir(contentDir)
-		if err != nil {
-			log.Fatal(err)
-		}
-		ghostContents := make([]pkg.GhostContent, 0)
-		for _, file := range files {
-			// if the file is a markdown file (.md)
-			if !file.IsDir() && strings.HasSuffix(file.Name(), ".md") {
-				mdFilePath, err := filepath.Abs(contentDir + "/" + file.Name())
-				if err != nil {
-					log.Fatal(err)
-				}
+	files, err := os.ReadDir(contentDir)
+	if err != nil {
+		log.Fatal("error when readDir", err)
+	}
 
-				// read the file and convert it to MarkdownPost
-				post, err := pkg.NewPostFromFrontMatterDocFile(mdFilePath)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				// apply changes to the post's static content prefix path
-				for i := 0; i < len(staticContentPrefixChangesRules); i += 2 {
-					post.ChangeStaticContentPrefix(staticContentPrefixChangesRules[i], staticContentPrefixChangesRules[i+1])
-				}
-
-				// convert MarkdownPost to GhostContent
-				ghostContent, err := pkg.NewGhostContentFromMarkdownPost(post)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				if deduplicatePosts && post.Slug != "" {
-					existingPost, err := ghostApi.GetPostBySlug(context.Background(), ghostContent.Slug)
-					if err != nil {
-						if !errors.Is(err, pkg.ErrNotFound) {
-							log.Fatal(err)
-						}
-					}
-
-					// override the id of ghostContent to existingPost.id
-					ghostContent.Id = existingPost.Id
-					ghostContent.UUID = existingPost.UUID
-				}
-				ghostContents = append(ghostContents, ghostContent)
-			}
-		}
-
-		if len(ghostContents) > 0 {
-			// TODO(bangau1): the ghost import tool can't deduplicate the content
-			// So we may need to fetch the ghost's content first and deduplicate it here
-			// by assigning the same id/uuid if we detect there is already the same title content there.
-			importData := pkg.NewGhostImportData(ghostContents...)
-			jsonData, err := importData.ToJson()
+	for _, file := range files {
+		// if the file is a markdown file (.md)
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".md") {
+			mdFilePath, err := filepath.Abs(contentDir + "/" + file.Name())
 			if err != nil {
 				log.Fatal(err)
 			}
-			fmt.Println(jsonData)
-		} else {
-			log.Println("WARN: no content being processed")
+
+			// read the file and convert it to MarkdownPost
+			post, err := pkg.NewPostFromFrontMatterDocFile(mdFilePath)
+			if err != nil {
+				log.Fatal("error when reading the markdown file", err)
+			}
+
+			// apply changes to the post's static content prefix path
+			// must be even number
+			for i := 0; i < len(staticContentPrefixChangesRules); i += 2 {
+				post.ChangeStaticContentPrefix(staticContentPrefixChangesRules[i], staticContentPrefixChangesRules[i+1])
+			}
+
+			// convert MarkdownPost to GhostContent
+			ghostContent, err := pkg.NewGhostContentFromMarkdownPost(post)
+			if err != nil {
+				log.Fatal("error when converting markdown post to Ghost's post", err)
+			}
+
+			if post.Slug != "" {
+				// check existing post with the same slug, to decide whether it's a CREATE or UPDATE operation
+				existingPost, err := ghostApi.GetPostBySlug(context.Background(), ghostContent.Slug)
+				if err != nil {
+					// if the error is not ErrNotFound, then exit
+					if !errors.Is(err, pkg.ErrNotFound) {
+						log.Fatal("error when getPostBySlug ", ghostContent.Slug, err)
+					}
+				}
+
+				// override the id of ghostContent to existingPost.id
+				// if existingPost is empty, then the ID and UUID is also empty, so should be fine
+				ghostContent.Id = existingPost.Id
+				ghostContent.UUID = existingPost.UUID
+
+				// if the same post already in the Ghost's, then it's an UPDATE operation
+				if ghostContent.Id != "" {
+					ghostContent.UpdatedAt = existingPost.UpdatedAt
+					_, err := ghostApi.UpdatePost(context.Background(), ghostContent)
+					if err != nil {
+						log.Fatal("error when UpdatePost", err)
+					}
+				} else { // it's a CREATE new post operation
+					_, err := ghostApi.CreatePost(context.Background(), ghostContent)
+					if err != nil {
+						log.Fatal("error when CreatePost", err)
+					}
+				}
+			} else {
+				log.Fatal("unexpected error: the post slug is empty for file: ", file.Name())
+			}
 		}
-	} else {
-		// TODO(bangau1)
 	}
 }
