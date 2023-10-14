@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"encoding/json"
+	"time"
 )
 
 // GhostContent represent the data to be imported to Ghost
@@ -50,4 +51,47 @@ func NewGhostContentFromMarkdownPost(post MarkdownPost) (GhostContent, error) {
 		Status:       status,
 		PublishedAt:  post.Date.UnixMilli(),
 	}, nil
+}
+
+type GhostImportData struct {
+	Contents []GhostContent
+}
+
+type ghostImportDTO struct {
+	Meta ghostImportMetadata `json:"meta"`
+	Data ghostImportData     `json:"data"`
+}
+
+type ghostImportData struct {
+	Posts []GhostContent `json:"posts"`
+	// TODO to support tags and post_tags
+}
+
+type ghostImportMetadata struct {
+	ExportedTimestampMsec int64  `json:"exported_on,omitempty"`
+	Version               string `json:"version,omitempty"`
+}
+
+func NewGhostImportData(contents ...GhostContent) GhostImportData {
+	return GhostImportData{
+		Contents: contents,
+	}
+}
+
+func (g *GhostImportData) ToJson() (string, error) {
+	data := ghostImportDTO{
+		Meta: ghostImportMetadata{
+			ExportedTimestampMsec: time.Now().UnixMilli(),
+			Version:               "2.14.0", // ghost version that is valid for (TODO: research more on this)
+		},
+		Data: ghostImportData{
+			Posts: g.Contents,
+		},
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return string(jsonData), nil
 }
