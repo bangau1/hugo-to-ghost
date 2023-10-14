@@ -4,6 +4,8 @@ Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -26,7 +28,7 @@ This CLI program will output json file that can later be imported to Ghost Impor
 For example:
 - hugo-to-ghost --contentDir ./content/english/post > ghost-content.json
 	to output the JSON file containing all Hugo's posts that conformed with the Ghost Importing Content format:
-- hugo-to-ghost --contentDir ./content/english/post --staticContentPrefixChange "/img/uploads/,/content/images/hugo/"
+- hugo-to-ghost --contentDir ./content/english/post --staticContentPrefixChanges "/img/uploads/,/content/images/hugo/"
 	to change the image assets in Hugo (that previously located in /img/uploads/ path) to /content/images/hugo folder inside the ghost installation
 `,
 	Run: cmdRun,
@@ -45,11 +47,20 @@ var (
 	contentDir                 string
 	isRecursive                bool = false // TODO(bangau1): to support recursive mode
 	staticContentPrefixChanges string
+
+	deduplicatePosts bool
+	ghostAdminAPIKey string
+	ghostURL         string
 )
 
 func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	rootCmd.Flags().StringVar(&contentDir, "contentDir", "", "The content directory where the frontmatter posts are located. Example: 'content/english/posts/'")
 	rootCmd.Flags().StringVar(&staticContentPrefixChanges, "staticContentPrefixChanges", "", "To change the static content prefix. Example: /img/uploads/,/content/images/hugo/ ")
+	rootCmd.Flags().BoolVar(&deduplicatePosts, "deduplicate", false, "Set it true if you want to detect the same post in Ghost. Ghost doesn't do deduplication functionality, hence if you don't set it and import the JSON file multiple times, it will create new post everytime (instead of updating it)")
+	rootCmd.Flags().StringVar(&ghostAdminAPIKey, "ghostAdminAPIKey", "", "The Ghost's Admin API Key. It's only needed if you set --deduplicate flag")
+	rootCmd.Flags().StringVar(&ghostURL, "ghostUrl", "http://localhost:8080", "The Ghost's URL It's only needed if you set --deduplicate flag")
 	// TODO(bangau1): add recursive mode
 
 	rootCmd.MarkFlagRequired("contentDir")
@@ -63,6 +74,14 @@ func cmdRun(cmd *cobra.Command, args []string) {
 	if len(staticContentPrefixChangesRules)%2 > 0 {
 		log.Fatal("staticContentPrefixChanges is invalid.")
 	}
+	var ghostApi pkg.GhostAdminAPI
+	if deduplicatePosts {
+		if ghostAdminAPIKey == "" {
+			log.Fatal("--ghostAdminAPIKey is required if --deduplicate is set")
+		}
+		ghostApi = pkg.NewGhostAdminAPI(ghostURL, ghostAdminAPIKey)
+	}
+
 	if !isRecursive {
 		files, err := os.ReadDir(contentDir)
 		if err != nil {
@@ -82,6 +101,7 @@ func cmdRun(cmd *cobra.Command, args []string) {
 				if err != nil {
 					log.Fatal(err)
 				}
+
 				// apply changes to the post's static content prefix path
 				for i := 0; i < len(staticContentPrefixChangesRules); i += 2 {
 					post.ChangeStaticContentPrefix(staticContentPrefixChangesRules[i], staticContentPrefixChangesRules[i+1])
@@ -91,6 +111,19 @@ func cmdRun(cmd *cobra.Command, args []string) {
 				ghostContent, err := pkg.NewGhostContentFromMarkdownPost(post)
 				if err != nil {
 					log.Fatal(err)
+				}
+
+				if deduplicatePosts && post.Slug != "" {
+					existingPost, err := ghostApi.GetPostBySlug(context.Background(), ghostContent.Slug)
+					if err != nil {
+						if !errors.Is(err, pkg.ErrNotFound) {
+							log.Fatal(err)
+						}
+					}
+
+					// override the id of ghostContent to existingPost.id
+					ghostContent.Id = existingPost.Id
+					ghostContent.UUID = existingPost.UUID
 				}
 				ghostContents = append(ghostContents, ghostContent)
 			}
