@@ -2,6 +2,8 @@ package pkg
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/adrg/frontmatter"
@@ -36,6 +38,7 @@ func NewPostFromFrontMatterDocFile(frontMatterDocFile string) (MarkdownPost, err
 	}
 
 	post.Content = string(content)
-	post.Slug = "" // TODO(bangau1)
+	// assign the slug from the filename (without the extension)
+	post.Slug = strings.TrimSuffix(filepath.Base(file.Name()), filepath.Ext(file.Name()))
 	return post, nil
 }
