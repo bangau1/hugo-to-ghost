@@ -157,11 +157,11 @@ func (g *GhostAdminAPI) UpdatePost(ctx context.Context, content GhostContent) (G
 		return GhostContent{}, err
 	}
 
-	if len(payload.Posts) == 0 {
+	if len(data.Posts) == 0 {
 		return GhostContent{}, ErrNotFound
 	}
 
-	return payload.Posts[0], nil
+	return data.Posts[0], nil
 }
 
 func (g *GhostAdminAPI) CreatePost(ctx context.Context, content GhostContent) (GhostContent, error) {
@@ -189,9 +189,9 @@ func (g *GhostAdminAPI) CreatePost(ctx context.Context, content GhostContent) (G
 		return GhostContent{}, err
 	}
 
-	if len(payload.Posts) == 0 {
+	if len(data.Posts) == 0 {
 		return GhostContent{}, ErrNotFound
 	}
 
-	return payload.Posts[0], nil
+	return data.Posts[0], nil
 }
