@@ -56,6 +56,7 @@ func cmdRun(cmd *cobra.Command, args []string) {
 		if err != nil {
 			log.Fatal(err)
 		}
+		ghostContents := make([]pkg.GhostContent, 0)
 		for _, file := range files {
 			// if the file is a markdown file (.md)
 			if !file.IsDir() && strings.HasSuffix(file.Name(), ".md") {
@@ -64,12 +65,30 @@ func cmdRun(cmd *cobra.Command, args []string) {
 					log.Fatal(err)
 				}
 
+				// read the file and convert it to MarkdownPost
 				post, err := pkg.NewPostFromFrontMatterDocFile(mdFilePath)
 				if err != nil {
 					log.Fatal(err)
 				}
-				fmt.Printf("%+v\n", post)
+
+				// convert MarkdownPost to GhostContent
+				ghostContent, err := pkg.NewGhostContentFromMarkdownPost(post)
+				if err != nil {
+					log.Fatal(err)
+				}
+				ghostContents = append(ghostContents, ghostContent)
 			}
+		}
+
+		if len(ghostContents) > 0 {
+			importData := pkg.NewGhostImportData(ghostContents...)
+			jsonData, err := importData.ToJson()
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(jsonData)
+		} else {
+			log.Println("WARN: no content being processed")
 		}
 	} else {
 		// TODO(bangau1)
