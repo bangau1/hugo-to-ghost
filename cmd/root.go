@@ -93,6 +93,9 @@ func cmdRun(cmd *cobra.Command, args []string) {
 		}
 
 		if len(ghostContents) > 0 {
+			// TODO(bangau1): the ghost import tool can't deduplicate the content
+			// So we may need to fetch the ghost's content first and deduplicate it here
+			// by assigning the same id/uuid if we detect there is already the same title content there.
 			importData := pkg.NewGhostImportData(ghostContents...)
 			jsonData, err := importData.ToJson()
 			if err != nil {
