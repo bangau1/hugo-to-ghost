@@ -22,13 +22,16 @@ func NewGhostContentFromMarkdownPost(post MarkdownPost) (GhostContent, error) {
 	if post.IsDraft {
 		status = "draft"
 	}
-
+	// Note: for now, just use the working version of mobiledoc described here:
+	// https://forum.ghost.org/t/markdown-to-mobiledoc-converter/5203
+	// Notably the sections part is quite tricky. So just use the 1 big section there
 	mobiledoc := map[string]any{
 		"version": "0.3.1",
 		"markups": []string{},
 		"atoms":   []string{},
-		"sections": [][]int{
-			{10, 10},
+		"sections": [][]any{
+			{10, 0},
+			{1, "p", []any{}},
 		},
 		"cards": [][]any{
 			{
