@@ -17,6 +17,7 @@ type GhostContent struct {
 	Status       string    `json:"status,omitempty"`
 	PublishedAt  time.Time `json:"published_at"`
 	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+	Url          string    `json:"url,omitempty"`
 }
 
 func NewGhostContentFromMarkdownPost(post MarkdownPost) (GhostContent, error) {

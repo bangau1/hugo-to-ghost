@@ -123,17 +123,17 @@ func cmdRun(cmd *cobra.Command, args []string) {
 					// note: we need to override the .UpdatedAt from the existingPost in Ghost, since Ghost uses
 					// that as mechanism to detect concurrent edit. Internally if Update content is success, the .UpdatedAt is updated accordingly in the database.
 					ghostContent.UpdatedAt = existingPost.UpdatedAt
-					_, err := ghostApi.UpdatePost(context.Background(), ghostContent)
+					updatedData, err := ghostApi.UpdatePost(context.Background(), ghostContent)
 					if err != nil {
 						log.Fatal("error when UpdatePost", err)
 					}
-					log.Printf("⬆️ slug=%s is UPDATED\n", ghostContent.Slug)
+					log.Printf("⬆️ slug=%s is UPDATED at %s\n", ghostContent.Slug, updatedData.Url)
 				} else { // it's a CREATE new post operation
-					_, err := ghostApi.CreatePost(context.Background(), ghostContent)
+					updatedData, err := ghostApi.CreatePost(context.Background(), ghostContent)
 					if err != nil {
 						log.Fatal("error when CreatePost", err)
 					}
-					log.Printf("✅ slug=%s is CREATED\n", ghostContent.Slug)
+					log.Printf("✅ slug=%s is CREATED at %s\n", ghostContent.Slug, updatedData.Url)
 				}
 			} else {
 				log.Fatal("unexpected error: the post slug is empty for file: ", file.Name())
