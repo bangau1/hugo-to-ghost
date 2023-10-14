@@ -8,12 +8,14 @@ import (
 // GhostContent represent the data to be imported to Ghost
 // See: https://ghost.org/docs/migration/content/
 type GhostContent struct {
-	Title        string `json:"title,omitempty"`
-	Slug         string `json:"slug,omitempty"`
-	FeatureImage string `json:"feature_image,omitempty"`
-	Mobiledoc    string `json:"mobiledoc,omitempty"`
-	Status       string `json:"status,omitempty"`
-	PublishedAt  int64  `json:"published_at"`
+	Id           string    `json:"id,omitempty"`
+	UUID         string    `json:"uuid,omitempty"`
+	Title        string    `json:"title,omitempty"`
+	Slug         string    `json:"slug,omitempty"`
+	FeatureImage string    `json:"feature_image,omitempty"`
+	Mobiledoc    string    `json:"mobiledoc,omitempty"`
+	Status       string    `json:"status,omitempty"`
+	PublishedAt  time.Time `json:"published_at"`
 }
 
 func NewGhostContentFromMarkdownPost(post MarkdownPost) (GhostContent, error) {
@@ -52,7 +54,7 @@ func NewGhostContentFromMarkdownPost(post MarkdownPost) (GhostContent, error) {
 		FeatureImage: post.Image,
 		Mobiledoc:    string(mobiledocsStringify),
 		Status:       status,
-		PublishedAt:  post.Date.UnixMilli(),
+		PublishedAt:  post.Date,
 	}, nil
 }
 
